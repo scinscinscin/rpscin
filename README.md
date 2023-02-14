@@ -23,7 +23,7 @@ const unTypeSafeRouter = Router("/").config({
   "/echo": {
     get: baseProcedure.query(z.object({ input: z.string() })).use(async function (req, res, { query }) {
       return { output: query.input };
-			//               ^? query: { input: string }
+      //            ^? query: { input: string }
     }),
   },
 });
@@ -60,7 +60,7 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
     post: baseProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
       .use(async (req, res, { input }) => {
-				//                    ^? input: { username: string; password: string }
+	//                    ^? input: { username: string; password: string }
         return { message: `Created a new user (${input.username})` };
       }),
 
