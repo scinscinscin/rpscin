@@ -23,7 +23,7 @@ const unTypeSafeRouter = Router("/").config({
   "/echo": {
     get: baseProcedure.query(z.object({ input: z.string() })).use(async function (req, res, { query }) {
       return { output: query.input };
-      //            ^? query: { input: string }
+      //               ^? query: { input: string }
     }),
   },
 });
@@ -60,7 +60,7 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
     post: baseProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
       .use(async (req, res, { input }) => {
-	//                    ^? input: { username: string; password: string }
+        //                    ^? input: { username: string; password: string }
         return { message: `Created a new user (${input.username})` };
       }),
 
@@ -94,8 +94,8 @@ client["/user"]["/"]
 //       ^? res: { message: string }
 
 client["/user"]["/"].get({ query: { take: 4 } }).then((res) => {
-	console.log(res);
-	//          ^? res: { users: { username: string; }[]; }
+  console.log(res);
+  //          ^? res: { users: { username: string; }[]; }
 });
 ```
 
@@ -154,7 +154,7 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
   "/whoami": {
     get: authProcedures.use(async (req, res, { token }) => {
       //                                       ^? token: string
-			return { user: findUserFromToken(token) }
+      return { user: findUserFromToken(token) }
     })
   }
 });
