@@ -7,8 +7,15 @@ client["/echo"].get({ query: { input: "Hello World!" } }).then(console.log);
 
 client["/user"]["/"]
   .post({ body: { username: "test_user_username", password: "test_user_password" } })
-  .then((res) => console.log(res));
-//       ^?
+  .then((res) => console.log(res))
+  //       ^?
+  .catch((err) => console.log(err));
+
+client["/user"]["/"]
+  .post({ body: { username: "scinorandex", password: "test_user_password" } })
+  .then((res) => console.log(res))
+  //       ^?
+  .catch((err) => console.log(err));
 
 client["/user"]["/"].get({ query: { take: 4 } }).then((res) => {
   console.log(res);
@@ -22,3 +29,8 @@ client["/user"]["/:user_uuid/post"]["/:post_uuid"]
   })
   .then((res) => console.log(res));
 //       ^?
+
+// client["/user"]["/whoami"]
+//   .get({})
+//   .then((res) => console.log(res))
+//   .catch((err) => console.error("error", err));

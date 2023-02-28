@@ -1,5 +1,5 @@
 import { Router, Server } from "../src/index";
-import { baseProcedure } from "@scinorandex/erpc";
+import { baseProcedure, ERPCError } from "@scinorandex/erpc";
 import { z } from "zod";
 
 const authProcedures = baseProcedure.extend(async (req, res) => {
@@ -22,7 +22,12 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
       .input(z.object({ username: z.string(), password: z.string() }))
       .use(async (req, res, { input }) => {
         //                     ^?
-        return { message: `Created a new user (${input.username})` };
+        if (input.username.startsWith("test_user")) return { message: `Created a new user (${input.username})` };
+        else
+          throw new ERPCError({
+            code: "UNAUTHORIZED",
+            message: `Expected username to start with test_user, received ${input.username}`,
+          });
       }),
 
     get: baseProcedure.query(z.object({ take: z.number().max(20) })).use(async (req, res, { query }) => {
@@ -39,9 +44,9 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
   },
 
   "/whoami": {
-    get: authProcedures.use(async (req, res, { token }) => {
-      //                                        ^?
-      return {};
+    get: baseProcedure.use(async (req, res, {}) => {
+      throw new ERPCError({ code: "BAD_REQUEST", message: "you got unlucky" });
+      return { username: "scinorandex" };
     }),
   },
 });

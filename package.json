@@ -1,6 +1,6 @@
 {
   "name": "@scinorandex/rpscin",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Fullstack typesafety powered by erpc",
   "main": "dist/index.js",
   "scripts": {
@@ -26,7 +26,7 @@
     "typescript": "4.9.4"
   },
   "dependencies": {
-    "@scinorandex/erpc": "0.1.1",
+    "@scinorandex/erpc": "0.1.3",
     "axios": "^1.3.2",
     "zod": "3.20.2"
   }

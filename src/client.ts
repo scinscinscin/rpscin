@@ -1,5 +1,6 @@
 import type { HTTPMethodTypes, RouterT } from "./router";
 import { Axios } from "axios";
+import { ERPCError } from "@scinorandex/erpc/dist/error";
 
 type isEmptyObject<T, EmptyValue, ContainsValue> = {} extends T ? EmptyValue : ContainsValue;
 type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: unknown; query_parameters: unknown }> =
@@ -51,10 +52,23 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
           fullPath += `?__erpc_query=${queryString}`;
         }
 
-        return new Promise((resolve) => {
-          client[method as HTTPMethodTypes](fullPath, JSON.stringify(body ?? {})).then(({ data }) => {
-            resolve(data.result);
-          });
+        return new Promise((resolve, reject) => {
+          client[method as HTTPMethodTypes](fullPath, JSON.stringify(body ?? {}))
+            .then(({ data }) => {
+              if (typeof data.success === "boolean") {
+                if (data.success && typeof data.result !== "undefined") return resolve(data.result);
+                else if (typeof data.error === "string") return reject(new Error(data.error));
+                else if (typeof data.error === "object") {
+                  const { type: code, message } = data.error;
+                  if (code && message) return reject(new ERPCError({ code, message }));
+                }
+              }
+
+              reject(new Error("Response was not ERPC compliant"));
+            })
+            .catch((err) => {
+              reject(new Error("Failed to connect to server"));
+            });
         });
       },
 
