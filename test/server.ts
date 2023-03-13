@@ -1,5 +1,5 @@
 import { Router, Server } from "../src/index";
-import { baseProcedure, ERPCError } from "@scinorandex/erpc";
+import { baseProcedure, ERPCError, zodFile } from "@scinorandex/erpc";
 import { z } from "zod";
 
 const authProcedures = baseProcedure.extend(async (req, res) => {
@@ -48,6 +48,21 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
       throw new ERPCError({ code: "BAD_REQUEST", message: "you got unlucky" });
       return { username: "scinorandex" };
     }),
+  },
+
+  "/image_upload": {
+    put: baseProcedure
+      .input(
+        z.object({
+          username: z.array(z.string()),
+          image: zodFile("image/png"),
+        })
+      )
+      .use(async (req, res, { input }) => {
+        console.log(input);
+        //               ^?
+        return true;
+      }),
   },
 });
 

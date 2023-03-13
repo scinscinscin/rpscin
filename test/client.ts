@@ -1,7 +1,13 @@
 import type { AppRouter } from "./server";
 import { Client } from "../src/index";
+import { Node } from "../src/envs/node";
+import fs from "fs";
+import path from "path";
 
-const client = Client<AppRouter>({ apiLink: "http://localhost:6666" });
+const client = Client<AppRouter>({
+  apiLink: "http://localhost:6666",
+  serializer: Node.serializer,
+});
 
 client["/echo"].get({ query: { input: "Hello World!" } }).then(console.log);
 
@@ -15,7 +21,7 @@ client["/user"]["/"]
   .post({ body: { username: "scinorandex", password: "test_user_password" } })
   .then((res) => console.log(res))
   //       ^?
-  .catch((err) => console.log(err));
+  .catch((err) => console.log("Expected error: ", err));
 
 client["/user"]["/"].get({ query: { take: 4 } }).then((res) => {
   console.log(res);
@@ -30,7 +36,8 @@ client["/user"]["/:user_uuid/post"]["/:post_uuid"]
   .then((res) => console.log(res));
 //       ^?
 
-// client["/user"]["/whoami"]
-//   .get({})
-//   .then((res) => console.log(res))
-//   .catch((err) => console.error("error", err));
+const image = Node.wrapFile("image/png", fs.createReadStream(path.resolve(__dirname, "./tux.png")));
+client["/user"]["/image_upload"]
+  .put({ body: { username: ["scinorandex", "another_username"], image } })
+  .then((res) => console.log(res));
+//        ^?

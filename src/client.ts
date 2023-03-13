@@ -23,18 +23,20 @@ type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = 
   };
 } & { [key: string]: unknown };
 
+export type Serializer = (body: any) => { body: any; headers: Record<string, any> };
 interface ClientOptions {
   apiLink: string;
+  serializer: Serializer;
+  generateHeaders?: () => Record<string, string>;
 }
 
-export function Client<Router extends RouterT<string, unknown, unknown, unknown>>({
-  apiLink,
-}: ClientOptions): RouterClientT<Router> {
+export function Client<Router extends RouterT<string, unknown, unknown, unknown>>(
+  opts: ClientOptions
+): RouterClientT<Router> {
   const client = new Axios({
     withCredentials: true,
-    baseURL: apiLink,
+    baseURL: opts.apiLink,
     transformResponse: (x) => JSON.parse(x),
-    headers: { "Content-Type": "application/json" },
   });
 
   function Proxify(pathSegments: string[]): {} {
@@ -52,8 +54,11 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
           fullPath += `?__erpc_query=${queryString}`;
         }
 
+        const convertedBody = opts.serializer(body ?? {});
+        const headers = { ...(opts.generateHeaders ? opts.generateHeaders() : {}), ...convertedBody.headers };
+
         return new Promise((resolve, reject) => {
-          client[method as HTTPMethodTypes](fullPath, JSON.stringify(body ?? {}))
+          client[method as HTTPMethodTypes](fullPath, convertedBody.body as any, { headers })
             .then(({ data }) => {
               if (typeof data.success === "boolean") {
                 if (data.success && typeof data.result !== "undefined") return resolve(data.result);
