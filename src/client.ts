@@ -23,6 +23,32 @@ type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = 
   };
 } & { [key: string]: unknown };
 
+export type GetInputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
+  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetInputTypes<
+    // @ts-ignore
+    Router["__internal"]["subrouters"][subrouterName]
+  >;
+} & {
+  [handlerName in keyof Router["__internal"]["config"]]: {
+    [methodName in keyof Router["__internal"]["config"][handlerName]]: EndpointParamsBuilder<
+      // @ts-ignore
+      Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]
+    >;
+  };
+} & { [key: string]: unknown };
+
+export type GetOutputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
+  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetOutputTypes<
+    // @ts-ignore
+    Router["__internal"]["subrouters"][subrouterName]
+  >;
+} & {
+  [handlerName in keyof Router["__internal"]["config"]]: {
+    // @ts-ignore
+    [methodName in keyof Router["__internal"]["config"][handlerName]]: Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]["return_type"];
+  };
+} & { [key: string]: unknown };
+
 export type Serializer = (body: any) => { body: any; headers: Record<string, any> };
 interface ClientOptions {
   apiLink: string;

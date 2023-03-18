@@ -1,8 +1,11 @@
 import type { AppRouter } from "./server";
-import { Client } from "../src/index";
+import { Client, GetInputTypes, GetOutputTypes } from "../src/index";
 import { Node } from "../src/envs/node";
 import fs from "fs";
 import path from "path";
+
+type Inputs = GetInputTypes<AppRouter>;
+type Outputs = GetOutputTypes<AppRouter>;
 
 const client = Client<AppRouter>({
   apiLink: "http://localhost:6666",
