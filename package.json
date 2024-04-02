@@ -1,11 +1,11 @@
 {
   "name": "@scinorandex/rpscin",
-  "version": "0.1.2",
+  "version": "0.3.1",
   "description": "Fullstack typesafety powered by erpc",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "ERPC_LOG=true ts-node --esm test/server.ts",
+    "test": "ts-node --esm test/server.ts",
     "testClient": "ts-node --esm test/client.ts"
   },
   "repository": {

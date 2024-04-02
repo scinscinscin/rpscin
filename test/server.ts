@@ -1,4 +1,4 @@
-import { Router, Server } from "../src/index";
+import { Router, Server, getRootRouter } from "../src/index";
 import { baseProcedure, ERPCError, zodFile } from "@scinorandex/erpc";
 import { z } from "zod";
 
@@ -7,7 +7,7 @@ const authProcedures = baseProcedure.extend(async (req, res) => {
   else throw new Error("An auth token was not found");
 });
 
-const unTypeSafeRouter = Router("/").config({
+const unTypeSafeRouter = getRootRouter({
   "/echo": {
     get: baseProcedure.query(z.object({ input: z.string() })).use(async (req, res, { query }) => {
       return { output: query.input };
@@ -16,7 +16,7 @@ const unTypeSafeRouter = Router("/").config({
   },
 });
 
-const userRouter = unTypeSafeRouter.subroute("/user").config({
+const userRouter = unTypeSafeRouter.sub("/user", {
   "/": {
     post: baseProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
@@ -52,12 +52,7 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
 
   "/image_upload": {
     put: baseProcedure
-      .input(
-        z.object({
-          username: z.array(z.string()),
-          image: zodFile("image/png"),
-        })
-      )
+      .input(z.object({ username: z.array(z.string()), image: zodFile("image/png") }))
       .use(async (req, res, { input }) => {
         console.log(input);
         //               ^?
@@ -66,8 +61,10 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
   },
 });
 
-const postRouter = userRouter.subroute("/:user_uuid/post").config({
+const postRouter = userRouter.sub("/:user_uuid/post", {
   "/": {
+    ws: "string",
+
     get: baseProcedure.query(z.object({ take: z.number(), cursor: z.number() })).use(async (req, res, locals) => {
       return { posts: [] };
     }),
@@ -83,6 +80,7 @@ const postRouter = userRouter.subroute("/:user_uuid/post").config({
       //    ^?
       return { post: { content: input.new_content, uuid: req.params.post_uuid, editedAt: Date.now() } };
     }),
+    ws: 1,
   },
 });
 

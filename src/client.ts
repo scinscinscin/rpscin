@@ -8,44 +8,63 @@ type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: un
     (T["path_parameters"] extends {} ? isEmptyObject<T["path_parameters"], {}, { path: T["path_parameters"] }> : {}) &
     (T["query_parameters"] extends {} ? { query: T["query_parameters"] } : {});
 
+/**
+ * Dear programmer
+ * When i wrote this code, only god and I knew how it worked.
+ * Now, only God knows it!
+ *
+ * Therefore, if you are trying to optimize these types and it fails (most surely)
+ * please increase this counter as a warning for the next person:
+ */
+type FuckMyLifeCounter = 1;
+
+type GetSubrouters<Router extends { __internal: { subrouters: unknown } }> = Router["__internal"]["subrouters"];
+type GetRouterConfig<Router extends { __internal: { config: unknown } }> = Router["__internal"]["config"];
+type GetEndpointMetadata<
+  Router extends { __internal: { config: { [key: string]: { [key: string]: { __internal_reflection: unknown } } } } },
+  handlerName extends keyof GetRouterConfig<Router>,
+  methodName extends keyof GetRouterConfig<Router>[handlerName]
+> = GetRouterConfig<Router>[handlerName][methodName]["__internal_reflection"];
+
 type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: RouterClientT<
+  [subrouterName in keyof GetSubrouters<Router>]: RouterClientT<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName]
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: (
+  [handlerName in keyof GetRouterConfig<Router>]: {
+    [methodName in keyof Omit<GetRouterConfig<Router>[handlerName], "ws">]: (
       // @ts-ignore
-      p: EndpointParamsBuilder<Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]>
+      p: EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, methodName>>
       // @ts-ignore
-    ) => Promise<Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]["return_type"]>;
+    ) => Promise<GetEndpointMetadata<Router, handlerName, methodName>["return_type"]>;
   };
 } & { [key: string]: unknown };
 
 export type GetInputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetInputTypes<
+  [subrouterName in keyof GetSubrouters<Router>]: GetInputTypes<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName]
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: EndpointParamsBuilder<
+  [handlerName in keyof GetRouterConfig<Router>]: {
+    [methodName in keyof GetRouterConfig<Router>[handlerName]]: EndpointParamsBuilder<
       // @ts-ignore
-      Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]
+      GetEndpointMetadata<Router, handlerName, methodName>
     >;
   };
 } & { [key: string]: unknown };
 
 export type GetOutputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetOutputTypes<
+  [subrouterName in keyof GetSubrouters<Router>]: GetOutputTypes<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName]
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
+  [handlerName in keyof GetRouterConfig<Router>]: {
     // @ts-ignore
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]["return_type"];
+    // prettier-ignore
+    [methodName in keyof GetRouterConfig<Router>[handlerName]]: GetEndpointMetadata<Router, handlerName, methodName>["return_type"];
   };
 } & { [key: string]: unknown };
 

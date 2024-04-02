@@ -2,10 +2,11 @@ import { Overwrite, RouteParameters } from "./RouteParameters";
 import { FinalizedHandler, Router as ERPCRouter, RouterT as ERPCRouterT } from "@scinorandex/erpc";
 
 export type HTTPMethodTypes = "get" | "post" | "put" | "patch" | "delete";
+
 type MergeParams<NewPath extends string, ExistingParams> = Overwrite<RouteParameters<NewPath>, ExistingParams>;
 
-type Inner<PathParams, O, HandlerName extends string> = {
-  [MethodName in Extract<keyof O, HTTPMethodTypes>]: FinalizedHandler<
+type Inner<PathParams, MethodsObject, HandlerName extends string> = {
+  [MethodName in Extract<keyof MethodsObject, HTTPMethodTypes>]: FinalizedHandler<
     unknown,
     unknown,
     MergeParams<HandlerName, PathParams>,
@@ -13,8 +14,10 @@ type Inner<PathParams, O, HandlerName extends string> = {
   >;
 };
 
-type Outer<PathParams, O> = {
-  [HandlerName in keyof O]: Inner<PathParams, O[HandlerName], Extract<HandlerName, string>>;
+type Outer<PathParams, Config> = {
+  [HandlerName in keyof Config]: Inner<PathParams, Omit<Config[HandlerName], "ws">, Extract<HandlerName, string>> & {
+    ws?: string;
+  };
 };
 
 export interface RouterT<Path extends string, PathParameters, Subrouters, Config> {
@@ -26,15 +29,19 @@ export interface RouterT<Path extends string, PathParameters, Subrouters, Config
     router: ERPCRouterT<{}>;
   };
   getSubroutedAt: () => Path;
-  subroute: <SubroutedAt extends string>(
-    subroutedAt: SubroutedAt
-  ) => RouterT<SubroutedAt, MergeParams<SubroutedAt, PathParameters>, {}, unknown>;
+  sub: <SubroutedAt extends string, Config extends Outer<MergeParams<SubroutedAt, PathParameters>, Config>>(
+    subroutedAt: SubroutedAt,
+    routerConfig: Config
+  ) => RouterT<SubroutedAt, MergeParams<SubroutedAt, PathParameters>, Subrouters, Config>;
+  config: <C extends Outer<PathParameters, C>>(hmm: C) => RouterT<Path, PathParameters, Subrouters, C>;
   mergeRouter: <A extends string, B, C, D>(
     subrouter: RouterT<A, B, C, D>
   ) => RouterT<Path, PathParameters, Overwrite<{ [key in A]: RouterT<A, B, C, D> }, Subrouters>, Config>;
-
-  config: <C extends Outer<PathParameters, C>>(hmm: C) => RouterT<Path, PathParameters, Subrouters, C>;
 }
+
+export const getRootRouter = <Config extends Outer<{}, Config>>(config: Config) => {
+  return Router("/").config(config);
+};
 
 export function Router<CreatedAt extends string, PathParameters = {}, Subrouters = {}>(
   path: CreatedAt
@@ -47,7 +54,18 @@ export function Router<CreatedAt extends string, PathParameters = {}, Subrouters
     __internal: { subrouters, router: erpcRouter, path },
     getSubroutedAt: () => path,
 
-    subroute: (subroutedAt) => Router(subroutedAt),
+    sub: <SubroutedAt extends string, Config extends Outer<MergeParams<SubroutedAt, PathParameters>, Config>>(
+      subroutedAt: SubroutedAt,
+      config: Config
+    ) => {
+      return Router(subroutedAt).config(config) as RouterT<
+        SubroutedAt,
+        MergeParams<SubroutedAt, PathParameters>,
+        Subrouters,
+        Config
+      >;
+    },
+
     mergeRouter: function <A extends string, B, C, D>(subrouter: RouterT<A, B, C, D>) {
       erpcRouter.merge(subrouter.__internal.router);
 
@@ -55,16 +73,19 @@ export function Router<CreatedAt extends string, PathParameters = {}, Subrouters
         CreatedAt,
         PathParameters,
         Overwrite<{ [key in A]: RouterT<A, B, C, D> }, Subrouters>,
-        typeof this["__internal"]["config"]
+        (typeof this)["__internal"]["config"]
       >;
     },
 
     config: function <C extends Outer<PathParameters, C>>(config: C) {
       for (const [handlerName, methods] of Object.entries(config)) {
         for (const [method, { __middlewares }] of Object.entries(
+          // @ts-ignore
           methods as { [key in HTTPMethodTypes]: FinalizedHandler<unknown, unknown, unknown, unknown> }
         )) {
-          erpcRouter.expressRouter[method as HTTPMethodTypes](handlerName, __middlewares);
+          if (method != "ws") {
+            erpcRouter.expressRouter[method as HTTPMethodTypes](handlerName, __middlewares);
+          }
         }
       }
 
