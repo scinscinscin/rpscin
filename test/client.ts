@@ -56,7 +56,7 @@ client["/user"]["/:user_uuid/post"]["/:post_uuid"]
       contents: "rpscin websocket client is working properly",
     });
 
-    connection.on("new_message", ({ contents }) => {
+    connection.on("new_message", async ({ contents }) => {
       console.log("ECHO Received:", contents);
     });
   });

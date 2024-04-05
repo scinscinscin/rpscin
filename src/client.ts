@@ -129,10 +129,9 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
             .then(({ data }) => {
               if (typeof data.success === "boolean") {
                 if (data.success && typeof data.result !== "undefined") return resolve(data.result);
-                else if (typeof data.error === "string") return reject(new Error(data.error));
-                else if (typeof data.error === "object") {
-                  const { type: code, message } = data.error;
-                  if (code && message) return reject(new ERPCError({ code, message }));
+                else {
+                  const error = generateErrorFromResponse(data);
+                  if (error) return reject(error);
                 }
               }
 
@@ -155,3 +154,13 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
   // @ts-ignore
   return Proxify([]);
 }
+
+export const generateErrorFromResponse = (data: any) => {
+  if (typeof data.error === "string") return new Error(data.error);
+  else if (typeof data.error === "object") {
+    const { type: code, message } = data.error;
+    if (code && message) return new ERPCError({ code, message });
+  }
+
+  return null;
+};

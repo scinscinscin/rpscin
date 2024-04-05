@@ -1,9 +1,9 @@
 import { Server, createWebSocketEndpoint, getRootRouter } from "../src/index";
-import { Connection, wsValidate } from "@scinorandex/erpc";
+import { Connection, ERPCError, wsValidate } from "@scinorandex/erpc";
 import { z } from "zod";
 
 const unTypeSafeRouter = getRootRouter({});
-const connections: Connection<Endpoint>[] = [];
+const connections: Set<Connection<Endpoint>> = new Set();
 
 type Endpoint = {
   Emits: { user_joined: { username: string }; new_message: { contents: string } };
@@ -15,14 +15,26 @@ const userRouter = unTypeSafeRouter.sub("/user", {
     ws: createWebSocketEndpoint(
       wsValidate<Endpoint>({ send_message: z.object({ contents: z.string() }) }),
       async ({ conn, params, query }) => {
-        console.log("New websocket request received");
-        console.log("Params: ", params);
-        connections.push(conn);
+        if (params.user_uuid !== "scinorandex") {
+          throw new ERPCError({ code: "UNAUTHORIZED", message: "You are not scinorandex" });
+        }
 
-        conn.on("send_message", (data) => {
+        console.log("New websocket request received. Parmeters:", params);
+        connections.add(conn);
+
+        conn.on("send_message", async (data) => {
+          if (data.contents === "error") {
+            throw new Error("I was told to throw an error");
+          }
+
           for (const connection of connections) {
             connection.emit("new_message", { contents: data.contents });
           }
+        });
+
+        conn.socket.on("close", () => {
+          connections.delete(conn);
+          console.log("Client has disconnected, remaining connections: ", connections);
         });
       }
     ),
