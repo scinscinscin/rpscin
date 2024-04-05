@@ -1,6 +1,8 @@
 import FormData from "form-data";
 import type { FileWrapper } from "@scinorandex/erpc";
+import type { WebSocketClient } from "../client";
 import type fs from "fs";
+import WebSocket from "ws";
 
 const isPlainObject = (value: any) => value?.constructor === Object;
 
@@ -17,6 +19,31 @@ export const Node = {
     return {
       body: convertedBody.body,
       headers: convertedBody.body.getHeaders(),
+    };
+  },
+
+  generateWebSocketClient(domain: string): (path: string) => ReturnType<WebSocketClient> {
+    return (path: string) => {
+      const ws = new WebSocket(`${domain}${path}`, {});
+      return new Promise((resolve, reject) => {
+        const eventHandlerMap = new Map<string, any>();
+
+        ws.on("open", () => {
+          resolve({
+            emit: function (eventName: string, data: any) {
+              ws.send(JSON.stringify({ eventName, data }));
+            },
+            on: function (eventName: string, handler: (data: any) => void) {
+              eventHandlerMap.set(eventName, handler);
+            },
+          });
+
+          ws.on("message", (wsData) => {
+            const { eventName, data } = JSON.parse(wsData.toString());
+            if (eventHandlerMap.has(eventName)) eventHandlerMap.get(eventName)(data);
+          });
+        });
+      });
     };
   },
 

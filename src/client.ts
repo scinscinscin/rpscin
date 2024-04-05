@@ -1,6 +1,7 @@
 import type { HTTPMethodTypes, RouterT } from "./router";
 import { Axios } from "axios";
 import { ERPCError } from "@scinorandex/erpc/dist/error";
+import { Connection } from "@scinorandex/erpc";
 
 type isEmptyObject<T, EmptyValue, ContainsValue> = {} extends T ? EmptyValue : ContainsValue;
 type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: unknown; query_parameters: unknown }> =
@@ -38,7 +39,20 @@ type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = 
       p: EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, methodName>>
       // @ts-ignore
     ) => Promise<GetEndpointMetadata<Router, handlerName, methodName>["return_type"]>;
-  };
+  } & ("ws" extends keyof GetRouterConfig<Router>[handlerName]
+    ? {
+        // @ts-ignore
+        ws: (p: Pick<EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, "ws">>, "path">) => Promise<
+          // @ts-ignore
+          Connection<{
+            // @ts-ignore
+            Emits: GetEndpointMetadata<Router, handlerName, "ws">["body_params"];
+            // @ts-ignore
+            Receives: GetEndpointMetadata<Router, handlerName, "ws">["return_type"];
+          }>
+        >;
+      }
+    : {});
 } & { [key: string]: unknown };
 
 export type GetInputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
@@ -68,9 +82,15 @@ export type GetOutputTypes<Router extends RouterT<string, unknown, unknown, unkn
   };
 } & { [key: string]: unknown };
 
+export type WebSocketClient = (link: string) => Promise<{
+  on(eventName: string, handler: (d: any) => void): void;
+  emit(eventName: string, data: any): void;
+}>;
+
 export type Serializer = (body: any) => { body: any; headers: Record<string, any> };
 interface ClientOptions {
   apiLink: string;
+  wsClient: WebSocketClient;
   serializer: Serializer;
   generateHeaders?: () => Record<string, string>;
 }
@@ -78,7 +98,7 @@ interface ClientOptions {
 export function Client<Router extends RouterT<string, unknown, unknown, unknown>>(
   opts: ClientOptions
 ): RouterClientT<Router> {
-  const client = new Axios({
+  const httpClient = new Axios({
     withCredentials: true,
     baseURL: opts.apiLink,
     transformResponse: (x) => JSON.parse(x),
@@ -94,6 +114,8 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
           fullPath = fullPath.replaceAll(`:${pathParamKey}`, pathParamValue);
         }
 
+        if (method === "ws") return opts.wsClient(fullPath);
+
         if (typeof query === "object") {
           const queryString = Buffer.from(JSON.stringify(query)).toString("base64url");
           fullPath += `?__erpc_query=${queryString}`;
@@ -103,7 +125,7 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
         const headers = { ...(opts.generateHeaders ? opts.generateHeaders() : {}), ...convertedBody.headers };
 
         return new Promise((resolve, reject) => {
-          client[method as HTTPMethodTypes](fullPath, convertedBody.body as any, { headers })
+          httpClient[method as HTTPMethodTypes](fullPath, convertedBody.body as any, { headers })
             .then(({ data }) => {
               if (typeof data.success === "boolean") {
                 if (data.success && typeof data.result !== "undefined") return resolve(data.result);

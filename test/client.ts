@@ -3,12 +3,14 @@ import { Client, GetInputTypes, GetOutputTypes } from "../src/index";
 import { Node } from "../src/envs/node";
 import fs from "fs";
 import path from "path";
+import { Connection } from "@scinorandex/erpc";
 
 type Inputs = GetInputTypes<AppRouter>;
 type Outputs = GetOutputTypes<AppRouter>;
 
 const client = Client<AppRouter>({
   apiLink: "http://localhost:6666",
+  wsClient: Node.generateWebSocketClient(`ws://localhost:6666`),
   serializer: Node.serializer,
 });
 
@@ -43,4 +45,18 @@ const image = Node.wrapFile("image/png", fs.createReadStream(path.resolve(__dirn
 client["/user"]["/image_upload"]
   .put({ body: { username: ["scinorandex", "another_username"], image } })
   .then((res) => console.log(res));
-//        ^?
+//       ^?
+
+client["/user"]["/:user_uuid/post"]["/:post_uuid"]
+  .ws({
+    path: { user_uuid: "scinorandex", post_uuid: "example_post_uuid" },
+  })
+  .then((connection) => {
+    connection.emit("send_message", {
+      contents: "rpscin websocket client is working properly",
+    });
+
+    connection.on("new_message", ({ contents }) => {
+      console.log("ECHO Received:", contents);
+    });
+  });

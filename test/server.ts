@@ -1,5 +1,5 @@
-import { Router, Server, getRootRouter } from "../src/index";
-import { baseProcedure, ERPCError, zodFile } from "@scinorandex/erpc";
+import { Server, createWebSocketEndpoint, getRootRouter } from "../src/index";
+import { baseProcedure, Connection, ERPCError, wsValidate, zodFile } from "@scinorandex/erpc";
 import { z } from "zod";
 
 const authProcedures = baseProcedure.extend(async (req, res) => {
@@ -61,10 +61,14 @@ const userRouter = unTypeSafeRouter.sub("/user", {
   },
 });
 
+type Endpoint = {
+  Emits: { user_joined: { username: string }; new_message: { contents: string } };
+  Receives: { send_message: { contents: string } };
+};
+const connections: Connection<Endpoint>[] = [];
+
 const postRouter = userRouter.sub("/:user_uuid/post", {
   "/": {
-    ws: "string",
-
     get: baseProcedure.query(z.object({ take: z.number(), cursor: z.number() })).use(async (req, res, locals) => {
       return { posts: [] };
     }),
@@ -80,7 +84,21 @@ const postRouter = userRouter.sub("/:user_uuid/post", {
       //    ^?
       return { post: { content: input.new_content, uuid: req.params.post_uuid, editedAt: Date.now() } };
     }),
-    ws: 1,
+
+    ws: createWebSocketEndpoint(
+      wsValidate<Endpoint>({ send_message: z.object({ contents: z.string() }) }),
+      async ({ conn, params, query }) => {
+        console.log("New websocket request received");
+        console.log("Params: ", params);
+        connections.push(conn);
+
+        conn.on("send_message", (data) => {
+          for (const connection of connections) {
+            connection.emit("new_message", { contents: data.contents });
+          }
+        });
+      }
+    ),
   },
 });
 
