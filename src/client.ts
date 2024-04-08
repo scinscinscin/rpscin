@@ -19,6 +19,26 @@ type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: un
  */
 type FuckMyLifeCounter = 1;
 
+interface WebSocketConnection<
+  Params extends {
+    Emits: { [key: string]: any };
+    Receives: { [key: string]: any };
+  },
+  SocketImpl
+> {
+  socket: SocketImpl;
+  emit<T extends keyof Params["Emits"]>(eventName: T, data: Params["Emits"][T]): void;
+  on<T extends keyof Params["Receives"]>(eventName: T, handler: (data: Params["Receives"][T]) => Promise<void>): void;
+}
+
+export class CancellablePromise<T> extends Promise<T> {
+  constructor(t: (resolve: (data: T) => void, reject: (reason: any) => void) => void, close: () => void) {
+    super(t);
+    this.close = close;
+  }
+  public close: () => void;
+}
+
 type GetSubrouters<Router extends { __internal: { subrouters: unknown } }> = Router["__internal"]["subrouters"];
 type GetRouterConfig<Router extends { __internal: { config: unknown } }> = Router["__internal"]["config"];
 type GetEndpointMetadata<
@@ -27,10 +47,11 @@ type GetEndpointMetadata<
   methodName extends keyof GetRouterConfig<Router>[handlerName]
 > = GetRouterConfig<Router>[handlerName][methodName]["__internal_reflection"];
 
-type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = {
+type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl> = {
   [subrouterName in keyof GetSubrouters<Router>]: RouterClientT<
     // @ts-ignore
-    GetSubrouters<Router>[subrouterName]
+    GetSubrouters<Router>[subrouterName],
+    SocketImpl
   >;
 } & {
   [handlerName in keyof GetRouterConfig<Router>]: {
@@ -41,15 +62,20 @@ type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = 
     ) => Promise<GetEndpointMetadata<Router, handlerName, methodName>["return_type"]>;
   } & ("ws" extends keyof GetRouterConfig<Router>[handlerName]
     ? {
-        // @ts-ignore
-        ws: (p: Pick<EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, "ws">>, "path">) => Promise<
+        ws: (
           // @ts-ignore
-          Connection<{
+          p: Pick<EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, "ws">>, "path">
+        ) => CancellablePromise<
+          WebSocketConnection<
             // @ts-ignore
-            Emits: GetEndpointMetadata<Router, handlerName, "ws">["body_params"];
-            // @ts-ignore
-            Receives: GetEndpointMetadata<Router, handlerName, "ws">["return_type"];
-          }>
+            {
+              // @ts-ignore
+              Emits: GetEndpointMetadata<Router, handlerName, "ws">["body_params"];
+              // @ts-ignore
+              Receives: GetEndpointMetadata<Router, handlerName, "ws">["return_type"];
+            },
+            SocketImpl
+          >
         >;
       }
     : {});
@@ -82,22 +108,19 @@ export type GetOutputTypes<Router extends RouterT<string, unknown, unknown, unkn
   };
 } & { [key: string]: unknown };
 
-export type WebSocketClient = (link: string) => Promise<{
-  on(eventName: string, handler: (d: any) => void): void;
-  emit(eventName: string, data: any): void;
-}>;
+export type WebSocketClient<SocketImpl> = (link: string) => CancellablePromise<WebSocketConnection<any, SocketImpl>>;
 
 export type Serializer = (body: any) => { body: any; headers: Record<string, any> };
-interface ClientOptions {
+interface ClientOptions<SocketImpl> {
   apiLink: string;
-  wsClient: WebSocketClient;
+  wsClient: WebSocketClient<SocketImpl>;
   serializer: Serializer;
   generateHeaders?: () => Record<string, string>;
 }
 
-export function Client<Router extends RouterT<string, unknown, unknown, unknown>>(
-  opts: ClientOptions
-): RouterClientT<Router> {
+export function Client<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl>(
+  opts: ClientOptions<SocketImpl>
+): RouterClientT<Router, SocketImpl> {
   const httpClient = new Axios({
     withCredentials: true,
     baseURL: opts.apiLink,

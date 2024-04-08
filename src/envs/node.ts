@@ -1,6 +1,6 @@
 import FormData from "form-data";
 import { ERPCError, type FileWrapper } from "@scinorandex/erpc";
-import { generateErrorFromResponse, type WebSocketClient } from "../client";
+import { CancellablePromise, generateErrorFromResponse, type WebSocketClient } from "../client";
 import type fs from "fs";
 import WebSocket from "ws";
 
@@ -22,38 +22,39 @@ export const Node = {
     };
   },
 
-  generateWebSocketClient(domain: string): (path: string) => ReturnType<WebSocketClient> {
+  generateWebSocketClient(domain: string): (path: string) => ReturnType<WebSocketClient<WebSocket>> {
     return (path: string) => {
       const ws = new WebSocket(`${domain}${path}`, {});
+      const eventHandlerMap = new Map();
 
-      return new Promise((resolve, reject) => {
-        const eventHandlerMap = new Map<string, any>();
-
-        ws.on("open", () => {
+      return new CancellablePromise(
+        (resolve, reject) => {
           ws.on("message", (wsData) => {
             const stringified = wsData.toString();
 
             if (stringified === "@scinorandex/erpc -- stabilize") {
               resolve({
-                emit: (eventName: string, data: any) => ws.send(JSON.stringify({ eventName, data })),
-                on: (eventName: string, handler: (data: any) => void) => eventHandlerMap.set(eventName, handler),
+                socket: ws,
+                emit: (eventName, data: any) => ws.send(JSON.stringify({ eventName, data })),
+                on: (eventName, handler: (data: any) => void) => eventHandlerMap.set(eventName, handler),
               });
             } else {
               const { eventName, data } = JSON.parse(wsData.toString());
               if (eventHandlerMap.has(eventName)) eventHandlerMap.get(eventName)(data);
             }
           });
-        });
 
-        ws.on("close", (data, reason) => {
-          try {
-            const response = JSON.parse(reason.toString());
-            const error = generateErrorFromResponse(response);
-            if (error) reject(error);
-            else reject(new Error("Response was not ERPC Compliant"));
-          } catch (err) {}
-        });
-      });
+          ws.on("close", (data, reason) => {
+            try {
+              const response = JSON.parse(reason.toString());
+              const error = generateErrorFromResponse(response);
+              if (error) reject(error);
+              else reject(new Error("Response was not ERPC Compliant"));
+            } catch (err) {}
+          });
+        },
+        () => ws.close()
+      );
     };
   },
 

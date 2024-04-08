@@ -4,11 +4,12 @@ import { Node } from "../src/envs/node";
 import fs from "fs";
 import path from "path";
 import { Connection } from "@scinorandex/erpc";
+import { WebSocket } from "ws";
 
 type Inputs = GetInputTypes<AppRouter>;
 type Outputs = GetOutputTypes<AppRouter>;
 
-const client = Client<AppRouter>({
+const client = Client<AppRouter, WebSocket>({
   apiLink: "http://localhost:6666",
   wsClient: Node.generateWebSocketClient(`ws://localhost:6666`),
   serializer: Node.serializer,
