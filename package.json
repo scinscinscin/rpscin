@@ -1,6 +1,6 @@
 {
   "name": "@scinorandex/rpscin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Fullstack typesafety powered by erpc",
   "main": "dist/index.js",
   "scripts": {
