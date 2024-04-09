@@ -1,5 +1,5 @@
 import type { FileWrapper } from "@scinorandex/erpc";
-import { CancellablePromise, WebSocketClient, generateErrorFromResponse } from "src/client";
+import { CancellablePromise, type WebSocketClient, generateErrorFromResponse } from "../client";
 
 const isPlainObject = (value: any) => value?.constructor === Object;
 
