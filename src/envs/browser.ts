@@ -1,4 +1,5 @@
 import type { FileWrapper } from "@scinorandex/erpc";
+import { CancellablePromise, type WebSocketClient, generateErrorFromResponse } from "../client";
 
 const isPlainObject = (value: any) => value?.constructor === Object;
 
@@ -17,6 +18,40 @@ export const Browser = {
     if (typeof mime === "string" && innerFile.type === mime) return innerFile as FileWrapper<T>;
     else if (typeof mime === "object" && mime.includes(innerFile.type as T)) return innerFile as FileWrapper<T>;
     else throw new Error("Incompatible mimetype between server and client, not sending");
+  },
+
+  generateWebSocketClient(domain: string): (path: string) => ReturnType<WebSocketClient<WebSocket>> {
+    return (path: string) => {
+      const ws = new WebSocket(`${domain}${path}`);
+      const eventHandlerMap = new Map();
+
+      return new CancellablePromise(
+        (resolve, reject) => {
+          ws.addEventListener("message", ({ data: stringified }) => {
+            if (stringified === "@scinorandex/erpc -- stabilize") {
+              resolve({
+                socket: ws,
+                emit: (eventName, data: any) => ws.send(JSON.stringify({ eventName, data })),
+                on: (eventName, handler: (data: any) => void) => eventHandlerMap.set(eventName, handler),
+              });
+            } else {
+              const { eventName, data } = JSON.parse(stringified);
+              if (eventHandlerMap.has(eventName)) eventHandlerMap.get(eventName)(data);
+            }
+          });
+
+          ws.addEventListener("close", (closeEvent) => {
+            try {
+              const response = JSON.parse(closeEvent.reason.toString());
+              const error = generateErrorFromResponse(response);
+              if (error) reject(error);
+              else reject(new Error("Response was not ERPC Compliant"));
+            } catch (err) {}
+          });
+        },
+        () => ws.close()
+      );
+    };
   },
 };
 

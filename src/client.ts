@@ -1,6 +1,7 @@
 import type { HTTPMethodTypes, RouterT } from "./router";
 import { Axios } from "axios";
 import { ERPCError } from "@scinorandex/erpc/dist/error";
+import { Connection } from "@scinorandex/erpc";
 
 type isEmptyObject<T, EmptyValue, ContainsValue> = {} extends T ? EmptyValue : ContainsValue;
 type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: unknown; query_parameters: unknown }> =
@@ -8,58 +9,119 @@ type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: un
     (T["path_parameters"] extends {} ? isEmptyObject<T["path_parameters"], {}, { path: T["path_parameters"] }> : {}) &
     (T["query_parameters"] extends {} ? { query: T["query_parameters"] } : {});
 
-type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: RouterClientT<
+/**
+ * Dear programmer
+ * When i wrote this code, only god and I knew how it worked.
+ * Now, only God knows it!
+ *
+ * Therefore, if you are trying to optimize these types and it fails (most surely)
+ * please increase this counter as a warning for the next person:
+ */
+type FuckMyLifeCounter = 1;
+
+interface WebSocketConnection<
+  Params extends {
+    Emits: { [key: string]: any };
+    Receives: { [key: string]: any };
+  },
+  SocketImpl
+> {
+  socket: SocketImpl;
+  emit<T extends keyof Params["Emits"]>(eventName: T, data: Params["Emits"][T]): void;
+  on<T extends keyof Params["Receives"]>(eventName: T, handler: (data: Params["Receives"][T]) => Promise<void>): void;
+}
+
+export class CancellablePromise<T> extends Promise<T> {
+  constructor(t: (resolve: (data: T) => void, reject: (reason: any) => void) => void, close: () => void) {
+    super(t);
+    this.close = close;
+  }
+  public close: () => void;
+}
+
+type GetSubrouters<Router extends { __internal: { subrouters: unknown } }> = Router["__internal"]["subrouters"];
+type GetRouterConfig<Router extends { __internal: { config: unknown } }> = Router["__internal"]["config"];
+type GetEndpointMetadata<
+  Router extends { __internal: { config: { [key: string]: { [key: string]: { __internal_reflection: unknown } } } } },
+  handlerName extends keyof GetRouterConfig<Router>,
+  methodName extends keyof GetRouterConfig<Router>[handlerName]
+> = GetRouterConfig<Router>[handlerName][methodName]["__internal_reflection"];
+
+type RouterClientT<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl> = {
+  [subrouterName in keyof GetSubrouters<Router>]: RouterClientT<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName],
+    SocketImpl
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: (
+  [handlerName in keyof GetRouterConfig<Router>]: {
+    [methodName in keyof Omit<GetRouterConfig<Router>[handlerName], "ws">]: (
       // @ts-ignore
-      p: EndpointParamsBuilder<Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]>
+      p: EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, methodName>>
       // @ts-ignore
-    ) => Promise<Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]["return_type"]>;
-  };
+    ) => Promise<GetEndpointMetadata<Router, handlerName, methodName>["return_type"]>;
+  } & ("ws" extends keyof GetRouterConfig<Router>[handlerName]
+    ? {
+        ws: (
+          // @ts-ignore
+          p: Pick<EndpointParamsBuilder<GetEndpointMetadata<Router, handlerName, "ws">>, "path">
+        ) => CancellablePromise<
+          WebSocketConnection<
+            // @ts-ignore
+            {
+              // @ts-ignore
+              Emits: GetEndpointMetadata<Router, handlerName, "ws">["body_params"];
+              // @ts-ignore
+              Receives: GetEndpointMetadata<Router, handlerName, "ws">["return_type"];
+            },
+            SocketImpl
+          >
+        >;
+      }
+    : {});
 } & { [key: string]: unknown };
 
 export type GetInputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetInputTypes<
+  [subrouterName in keyof GetSubrouters<Router>]: GetInputTypes<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName]
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: EndpointParamsBuilder<
+  [handlerName in keyof GetRouterConfig<Router>]: {
+    [methodName in keyof GetRouterConfig<Router>[handlerName]]: EndpointParamsBuilder<
       // @ts-ignore
-      Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]
+      GetEndpointMetadata<Router, handlerName, methodName>
     >;
   };
 } & { [key: string]: unknown };
 
 export type GetOutputTypes<Router extends RouterT<string, unknown, unknown, unknown>> = {
-  [subrouterName in keyof Router["__internal"]["subrouters"]]: GetOutputTypes<
+  [subrouterName in keyof GetSubrouters<Router>]: GetOutputTypes<
     // @ts-ignore
-    Router["__internal"]["subrouters"][subrouterName]
+    GetSubrouters<Router>[subrouterName]
   >;
 } & {
-  [handlerName in keyof Router["__internal"]["config"]]: {
+  [handlerName in keyof GetRouterConfig<Router>]: {
     // @ts-ignore
-    [methodName in keyof Router["__internal"]["config"][handlerName]]: Router["__internal"]["config"][handlerName][methodName]["__internal_reflection"]["return_type"];
+    // prettier-ignore
+    [methodName in keyof GetRouterConfig<Router>[handlerName]]: GetEndpointMetadata<Router, handlerName, methodName>["return_type"];
   };
 } & { [key: string]: unknown };
 
+export type WebSocketClient<SocketImpl> = (link: string) => CancellablePromise<WebSocketConnection<any, SocketImpl>>;
+
 export type Serializer = (body: any) => { body: any; headers: Record<string, any> };
-interface ClientOptions {
+interface ClientOptions<SocketImpl> {
   apiLink: string;
+  wsClient: WebSocketClient<SocketImpl>;
   serializer: Serializer;
   generateHeaders?: () => Record<string, string>;
 }
 
-export function Client<Router extends RouterT<string, unknown, unknown, unknown>>(
-  opts: ClientOptions
-): RouterClientT<Router> {
-  const client = new Axios({
+export function Client<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl>(
+  opts: ClientOptions<SocketImpl>
+): RouterClientT<Router, SocketImpl> {
+  const httpClient = new Axios({
     withCredentials: true,
     baseURL: opts.apiLink,
     transformResponse: (x) => JSON.parse(x),
@@ -75,6 +137,8 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
           fullPath = fullPath.replaceAll(`:${pathParamKey}`, pathParamValue);
         }
 
+        if (method === "ws") return opts.wsClient(fullPath);
+
         if (typeof query === "object") {
           const queryString = Buffer.from(JSON.stringify(query)).toString("base64url");
           fullPath += `?__erpc_query=${queryString}`;
@@ -84,14 +148,13 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
         const headers = { ...(opts.generateHeaders ? opts.generateHeaders() : {}), ...convertedBody.headers };
 
         return new Promise((resolve, reject) => {
-          client[method as HTTPMethodTypes](fullPath, convertedBody.body as any, { headers })
+          httpClient[method as HTTPMethodTypes](fullPath, convertedBody.body as any, { headers })
             .then(({ data }) => {
               if (typeof data.success === "boolean") {
                 if (data.success && typeof data.result !== "undefined") return resolve(data.result);
-                else if (typeof data.error === "string") return reject(new Error(data.error));
-                else if (typeof data.error === "object") {
-                  const { type: code, message } = data.error;
-                  if (code && message) return reject(new ERPCError({ code, message }));
+                else {
+                  const error = generateErrorFromResponse(data);
+                  if (error) return reject(error);
                 }
               }
 
@@ -114,3 +177,13 @@ export function Client<Router extends RouterT<string, unknown, unknown, unknown>
   // @ts-ignore
   return Proxify([]);
 }
+
+export const generateErrorFromResponse = (data: any) => {
+  if (typeof data.error === "string") return new Error(data.error);
+  else if (typeof data.error === "object") {
+    const { type: code, message } = data.error;
+    if (code && message) return new ERPCError({ code, message });
+  }
+
+  return null;
+};

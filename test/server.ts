@@ -1,5 +1,5 @@
-import { Router, Server } from "../src/index";
-import { baseProcedure, ERPCError, zodFile } from "@scinorandex/erpc";
+import { Server, createWebSocketEndpoint, getRootRouter } from "../src/index";
+import { baseProcedure, Connection, ERPCError, wsValidate, zodFile } from "@scinorandex/erpc";
 import { z } from "zod";
 
 const authProcedures = baseProcedure.extend(async (req, res) => {
@@ -7,7 +7,7 @@ const authProcedures = baseProcedure.extend(async (req, res) => {
   else throw new Error("An auth token was not found");
 });
 
-const unTypeSafeRouter = Router("/").config({
+const unTypeSafeRouter = getRootRouter({
   "/echo": {
     get: baseProcedure.query(z.object({ input: z.string() })).use(async (req, res, { query }) => {
       return { output: query.input };
@@ -16,7 +16,7 @@ const unTypeSafeRouter = Router("/").config({
   },
 });
 
-const userRouter = unTypeSafeRouter.subroute("/user").config({
+const userRouter = unTypeSafeRouter.sub("/user", {
   "/": {
     post: baseProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
@@ -52,12 +52,7 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
 
   "/image_upload": {
     put: baseProcedure
-      .input(
-        z.object({
-          username: z.array(z.string()),
-          image: zodFile("image/png"),
-        })
-      )
+      .input(z.object({ username: z.array(z.string()), image: zodFile("image/png") }))
       .use(async (req, res, { input }) => {
         console.log(input);
         //               ^?
@@ -66,7 +61,13 @@ const userRouter = unTypeSafeRouter.subroute("/user").config({
   },
 });
 
-const postRouter = userRouter.subroute("/:user_uuid/post").config({
+type Endpoint = {
+  Emits: { user_joined: { username: string }; new_message: { contents: string } };
+  Receives: { send_message: { contents: string } };
+};
+const connections: Set<Connection<Endpoint>> = new Set();
+
+const postRouter = userRouter.sub("/:user_uuid/post", {
   "/": {
     get: baseProcedure.query(z.object({ take: z.number(), cursor: z.number() })).use(async (req, res, locals) => {
       return { posts: [] };
@@ -83,6 +84,25 @@ const postRouter = userRouter.subroute("/:user_uuid/post").config({
       //    ^?
       return { post: { content: input.new_content, uuid: req.params.post_uuid, editedAt: Date.now() } };
     }),
+
+    ws: createWebSocketEndpoint(
+      wsValidate<Endpoint>({ send_message: z.object({ contents: z.string() }) }),
+      async ({ conn, params, query }) => {
+        console.log("New websocket request received. Parms:", params);
+        connections.add(conn);
+
+        conn.socket.on("close", () => {
+          console.log("WebSocket client has disconnected");
+          connections.delete(conn);
+        });
+
+        conn.on("send_message", async (data) => {
+          for (const connection of connections) {
+            connection.emit("new_message", { contents: data.contents });
+          }
+        });
+      }
+    ),
   },
 });
 
