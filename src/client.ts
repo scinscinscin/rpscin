@@ -1,5 +1,5 @@
 import type { HTTPMethodTypes, RouterT } from "./router";
-import { Axios } from "axios";
+import axios, { Axios, AxiosInstance, AxiosRequestConfig, CreateAxiosDefaults } from "axios";
 import { ERPCError } from "@scinorandex/erpc/dist/error";
 import { Connection } from "@scinorandex/erpc";
 
@@ -116,12 +116,13 @@ interface ClientOptions<SocketImpl> {
   wsClient: WebSocketClient<SocketImpl>;
   serializer: Serializer;
   generateHeaders?: () => Record<string, string>;
+  createAxiosInstance?: (opts: AxiosRequestConfig) => AxiosInstance
 }
 
 export function Client<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl>(
   opts: ClientOptions<SocketImpl>
 ): RouterClientT<Router, SocketImpl> {
-  const httpClient = new Axios({
+  const httpClient =  (opts.createAxiosInstance ?? ((config) => new Axios(config)))({
     withCredentials: true,
     baseURL: opts.apiLink,
     transformResponse: (x) => JSON.parse(x),
