@@ -55,25 +55,16 @@ export const Browser = {
   },
 };
 
-function serialize(body: any, prefix = [] as string[], ctx = { fd: new FormData(), isJSON: true }) {
-  if (typeof body !== "object") {
-    ctx.fd.append(prefix.join("."), String(body).toString());
-  } else {
-    if (isPlainObject(body)) {
-      // regular object
-      Object.entries(body).forEach(([key, value]) => {
-        serialize(value, [...prefix, key], ctx);
-      });
-    } else if (Array.isArray(body)) {
-      body.forEach((item, index) => {
-        serialize(item, [...prefix, `${index}`], ctx);
-      });
-    } else {
-      ctx.fd.append(prefix.join("."), body);
-      ctx.isJSON = false;
-    }
-  }
+function serialize(value: any, path: string[] = [], ctx = { files: [] as any[], items: [] as any[] }): any {
+  if (typeof value !== "object" || value === null) ctx.items.push([path.join("."), value]);
+  else if (Array.isArray(value)) value.forEach((item, index) => serialize(item, [...path, `${index}`], ctx));
+  else if (isPlainObject(value)) Object.entries(value).forEach(([key, value]) => serialize(value, [...path, key], ctx));
+  else ctx.files.push([path.join("."), value]);
 
-  if (ctx.isJSON) return { type: "json", body: JSON.stringify(body) };
-  else return { type: "form", body: ctx.fd };
+  if (ctx.files.length == 0) return { type: "json", body: JSON.stringify(value) };
+
+  const fd = new FormData();
+  fd.append("__erpc_body", JSON.stringify(ctx.items));
+  ctx.files.forEach(([key, value]) => fd.append(key, value));
+  return { type: "form", body: fd };
 }
