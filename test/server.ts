@@ -23,11 +23,11 @@ const userRouter = unTypeSafeRouter.sub("/user", {
       .use(async (req, res, { input }) => {
         //                     ^?
         if (input.username.startsWith("test_user")) return { message: `Created a new user (${input.username})` };
-        else
-          throw new ERPCError({
-            code: "UNAUTHORIZED",
-            message: `Expected username to start with test_user, received ${input.username}`,
-          });
+
+        throw new ERPCError({
+          code: "UNAUTHORIZED",
+          message: `Expected username to start with test_user, received ${input.username}`,
+        });
       }),
 
     get: baseProcedure.query(z.object({ take: z.number().max(20) })).use(async (req, res, { query }) => {
@@ -54,7 +54,7 @@ const userRouter = unTypeSafeRouter.sub("/user", {
     put: baseProcedure
       .input(z.object({ username: z.array(z.string()), image: zodFile("image/png") }))
       .use(async (req, res, { input }) => {
-        console.log(input);
+        console.log(input.image);
         //               ^?
         return true;
       }),

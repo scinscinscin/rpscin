@@ -34,6 +34,7 @@ function nonblocking() {
       subscription.close();
     });
   });
+
   subscription.catch((err) => {
     console.log("failed to initialize websocket connection:", err);
   });

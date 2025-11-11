@@ -1,7 +1,6 @@
 import type { HTTPMethodTypes, RouterT } from "./router";
-import axios, { Axios, AxiosInstance, AxiosRequestConfig, CreateAxiosDefaults } from "axios";
+import { Axios, AxiosInstance, AxiosRequestConfig } from "axios";
 import { ERPCError } from "@scinorandex/erpc/dist/error";
-import { Connection } from "@scinorandex/erpc";
 
 type isEmptyObject<T, EmptyValue, ContainsValue> = {} extends T ? EmptyValue : ContainsValue;
 type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: unknown; query_parameters: unknown }> =
@@ -19,11 +18,8 @@ type EndpointParamsBuilder<T extends { body_params: unknown; path_parameters: un
  */
 type FuckMyLifeCounter = 1;
 
-interface WebSocketConnection<
-  Params extends {
-    Emits: { [key: string]: any };
-    Receives: { [key: string]: any };
-  },
+export interface WebSocketConnection<
+  Params extends { Emits: { [key: string]: any }; Receives: { [key: string]: any } },
   SocketImpl
 > {
   socket: SocketImpl;
@@ -116,13 +112,13 @@ interface ClientOptions<SocketImpl> {
   wsClient: WebSocketClient<SocketImpl>;
   serializer: Serializer;
   generateHeaders?: () => Record<string, string>;
-  createAxiosInstance?: (opts: AxiosRequestConfig) => AxiosInstance
+  createAxiosInstance?: (opts: AxiosRequestConfig) => AxiosInstance;
 }
 
 export function Client<Router extends RouterT<string, unknown, unknown, unknown>, SocketImpl>(
   opts: ClientOptions<SocketImpl>
 ): RouterClientT<Router, SocketImpl> {
-  const httpClient =  (opts.createAxiosInstance ?? ((config) => new Axios(config)))({
+  const httpClient = (opts.createAxiosInstance ?? ((config) => new Axios(config)))({
     withCredentials: true,
     baseURL: opts.apiLink,
     transformResponse: (x) => JSON.parse(x),
